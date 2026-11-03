@@ -62,6 +62,12 @@ app.get('/latest-events', async(req, res)=>{
 })
 
 
+// Get All Events -- http://localhost:8000/events
+app.get('/events', async(req, res) =>{
+    const result = await eventsCollection.find().sort({createdAt:-1}).toArray();
+    res.send(result);
+})
+
 
 
 
