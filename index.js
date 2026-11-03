@@ -44,11 +44,22 @@ app.get('/event/:userid', async(req, res) => {
 });
 
 //-- Create New Event -- http://localhost:8000/event
-app.post('/event', (req, res) => {
-    const newEvent = req.body;
-    const result = eventsCollection.insertOne(newEvent);
+app.post('/event', async(req, res) => {
+    const newEvent = {
+        ...req.body,
+        createdAt: new Date(),
+        updatedAt: new Date()
+    };
+    const result = await eventsCollection.insertOne(newEvent);
     res.send(result);
 });
+
+
+//-- Gell latest 6 events -- http://localhost:8000/latest-events
+app.get('/latest-events', async(req, res)=>{
+    const result = await eventsCollection.find().sort({createdAt: -1}).limit(6).toArray();
+    res.send(result);
+})
 
 
 
