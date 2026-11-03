@@ -3,7 +3,7 @@ import cors from "cors";
 const app = express();
 
 import 'dotenv/config'
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 
 const PORT = 8000;
 
@@ -35,6 +35,13 @@ app.get('/', (req, res) =>{
 
 
 //http://localhost:8000/
+
+//-- Get User Events -- http://localhost:8000/event/id
+app.get('/event/:userid', async(req, res) => {
+    const {userid} = req.params;
+    const result = await eventsCollection.find({user_id:userid}).toArray();
+    res.send(result);
+});
 
 //-- Create New Event -- http://localhost:8000/event
 app.post('/event', (req, res) => {
