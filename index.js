@@ -27,6 +27,7 @@ const connetClient = await connectToMongoDB();
 const db = connetClient.db("upliftlydb");
 const eventsCollection = db.collection('events_list');
 const usersCollection = db.collection('user');
+const eventJoinedCollection = db.collection('event_joined');
 
 
 
@@ -36,6 +37,28 @@ app.get('/', (req, res) =>{
 
 
 //http://localhost:8000/
+
+//-- Check if a user already joined an event -- http://localhost:8000/user/event-joined?userId=...&eventId=...
+//-- (must be registered before GET /user/:userId, otherwise "event-joined" is captured as a userId)
+app.get('/user/event-joined', async(req, res)=>{
+    const { userId, eventId } = req.query;
+
+    if (!userId || !eventId) {
+        return res.status(400).send({ message: "userId and eventId are required" });
+    }
+
+    try {
+        const existing = await eventJoinedCollection.findOne({
+            userId: String(userId),
+            eventId: String(eventId)
+        });
+
+        res.send({ joined: !!existing });
+    } catch (error) {
+        res.status(500).send({ message: "Failed to check join status" });
+    }
+})
+
 
 //-- Get user by user id
 app.get('/user/:userId', async(req, res)=>{
@@ -72,7 +95,6 @@ app.get('/latest-events', async(req, res)=>{
 
 
 // Get All Events -- http://localhost:8000/events
-
 app.get('/events', async (req, res) => {
     try {
         const { search, eventType, sort } = req.query;
@@ -122,6 +144,53 @@ app.get('/events', async (req, res) => {
 });
 
 
+// Delete event by id 
+app.delete('/event/:Id', async(req, res)=>{
+    const {Id} = req.params;
+
+    if (!ObjectId.isValid(Id)) {
+        return res.status(400).send({ message: "Invalid event id" });
+    }
+
+    try {
+        const result = await eventsCollection.deleteOne({_id: new ObjectId(Id)});
+        res.send(result);
+    } catch (error) {
+        res.status(500).send({ message: "Failed to delete event" });
+    }
+})
+
+
+// Event Update 
+app.patch('/event/:Id', async(req, res) => {
+    const {Id} = req.params;
+
+    if (!ObjectId.isValid(Id)) {
+        return res.status(400).send({ message: "Invalid event id" });
+    }
+
+    const { eventTitle, eventType, eventDate, location, imageUrl, eventDescription } = req.body;
+
+    const updateData = {};
+    if (eventTitle !== undefined) updateData.eventTitle = eventTitle;
+    if (eventType !== undefined) updateData.eventType = eventType;
+    if (eventDate !== undefined) updateData.eventDate = eventDate;
+    if (location !== undefined) updateData.location = location;
+    if (imageUrl !== undefined) updateData.imageUrl = imageUrl;
+    if (eventDescription !== undefined) updateData.eventDescription = eventDescription;
+
+    try {
+        const result = await eventsCollection.updateOne(
+            {_id: new ObjectId(Id)},
+            { $set: { ...updateData, updatedAt: new Date() } }
+        );
+
+        res.send(result);
+    } catch (error) {
+        res.status(500).send({ message: "Failed to update event" });
+    }
+})
+
 
 // Get event by id -- http://localhost:8000/events/id
 app.get('/events/:id', async(req, res) =>{
@@ -130,6 +199,80 @@ app.get('/events/:id', async(req, res) =>{
     res.send(result);
 })
 
+
+
+
+// =============== Event Joined
+
+//-- Join an event (one user can join an event only once)
+app.post('/user/event-joined', async(req, res)=>{
+    const { eventId, userId, status } = req.body;
+
+    if (!eventId || !userId) {
+        return res.status(400).send({ message: "eventId and userId are required" });
+    }
+
+    try {
+        const existing = await eventJoinedCollection.findOne({
+            userId: String(userId),
+            eventId: String(eventId)
+        });
+
+        if (existing) {
+            return res.status(409).send({
+                message: "You have already joined this event",
+                alreadyJoined: true
+            });
+        }
+
+        const newData = {
+            eventId: String(eventId),
+            userId: String(userId),
+            status: status || "joined",
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
+
+        const result = await eventJoinedCollection.insertOne(newData);
+        res.send(result);
+    } catch (error) {
+        res.status(500).send({ message: "Failed to join event" });
+    }
+})
+
+app.get("/user/event-joined", async (req, res) => {
+    try {
+        const { userId, eventId } = req.query;
+
+        if (!userId || !eventId) {
+            return res.status(400).send({
+                message: "User ID and Event ID are required"
+            });
+        }
+
+        const result = await eventJoinedCollection.findOne({
+            userId: userId,
+            eventId: eventId,
+            status: "joined"
+        });
+
+        res.send({
+            joined: !!result
+        });
+
+    } catch (error) {
+        res.status(500).send({
+            message: "Failed to check join status"
+        });
+    }
+});
+
+//-- Get joined user by user id
+app.get('/user/event-joined/:userId', async(req, res) =>{
+    const {userId} = req.params;
+    const result = await eventJoinedCollection.find({userId:userId}).toArray();
+    res.send(result);
+})
 
 
 app.listen(PORT, ()=>{
