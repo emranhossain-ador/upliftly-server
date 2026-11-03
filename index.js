@@ -36,10 +36,10 @@ app.get('/', (req, res) =>{
 
 //http://localhost:8000/
 
-//-- Get User Events -- http://localhost:8000/event/id
-app.get('/event/:userid', async(req, res) => {
-    const {userid} = req.params;
-    const result = await eventsCollection.find({user_id:userid}).toArray();
+//-- Get User Events -- http://localhost:8000/users/:userId/events
+app.get('/users/:userId/events', async(req, res) => {
+    const {userId} = req.params;
+    const result = await eventsCollection.find({user_id:userId}).toArray();
     res.send(result);
 });
 
@@ -65,6 +65,14 @@ app.get('/latest-events', async(req, res)=>{
 // Get All Events -- http://localhost:8000/events
 app.get('/events', async(req, res) =>{
     const result = await eventsCollection.find().sort({createdAt:-1}).toArray();
+    res.send(result);
+})
+
+
+// Get event by id -- http://localhost:8000/events/id
+app.get('/events/:id', async(req, res) =>{
+    const {id} = req.params;
+    const result = await eventsCollection.findOne({_id: new ObjectId(id)});
     res.send(result);
 })
 
