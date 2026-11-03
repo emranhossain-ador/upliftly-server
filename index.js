@@ -70,7 +70,9 @@ app.get('/events', async(req, res) =>{
 
 
 
-
 app.listen(PORT, ()=>{
     console.log(`web server listening on port ${PORT}`);
 })
+
+
+export default app;
