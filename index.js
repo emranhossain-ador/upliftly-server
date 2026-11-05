@@ -113,7 +113,7 @@ app.post('/event',tokenVerify, async(req, res) => {
 
 
 //-- Gell latest 6 events -- http://localhost:8000/latest-events
-app.get('/latest-events',tokenVerify, async(req, res)=>{
+app.get('/latest-events', async(req, res)=>{
     const today = new Intl.DateTimeFormat("en-CA", {
             timeZone: "Asia/Dhaka",
             year: "numeric",
@@ -127,7 +127,7 @@ app.get('/latest-events',tokenVerify, async(req, res)=>{
 
 
 // Get All Events -- http://localhost:8000/events
-app.get('/events', tokenVerify, async (req, res) => {
+app.get('/events', async (req, res) => {
     try {
         const { search, eventType, sort, status } = req.query;
 
@@ -342,7 +342,7 @@ app.delete('/user/event-joined/:Id/:userId', tokenVerify, async(req, res) =>{
 
 
 
-app.get("/dashboard/statistics", tokenVerify, async (req, res) => {
+app.get("/dashboard/statistics", async (req, res) => {
     try {
         // Get today's date in Bangladesh timezone
         const today = new Intl.DateTimeFormat("en-CA", {
@@ -390,7 +390,7 @@ app.get("/dashboard/statistics", tokenVerify, async (req, res) => {
 });
 
 
-app.get("/events/:eventId/join-count", tokenVerify, async(req, res) =>{
+app.get("/events/:eventId/join-count", async(req, res) =>{
     const {eventId} = req.params;
     const totalJoined  = await eventJoinedCollection.countDocuments({
         eventId: String(eventId),
