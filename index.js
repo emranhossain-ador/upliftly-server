@@ -4,6 +4,7 @@ const app = express();
 
 import 'dotenv/config'
 import { MongoClient, ObjectId } from "mongodb";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 
 const PORT = 8000;
 
@@ -30,6 +31,30 @@ const usersCollection = db.collection('user');
 const eventJoinedCollection = db.collection('event_joined');
 
 
+// Token verify
+const tokenVerify = async(req, res, next)=>{
+    const authHeaders = req.headers.authorization;
+
+    if(!authHeaders){
+        return res.status(401).send({msg: "Unauthorized!"});
+    }
+
+    const token = authHeaders.split(" ")[1];
+
+    if(!token){
+        return res.status(401).send({msg: "Unauthorized!"});
+    }
+
+    const JWKS = createRemoteJWKSet(new URL(`${process.env.CLIENT_URL}/api/auth/jwks`));
+    
+    try {
+        const {payload} = await jwtVerify(token, JWKS);
+        next();
+    } catch (error) {
+        return res.status(500).send({msg: "Sever errors!"});
+    }
+}
+
 
 app.get('/', (req, res) =>{
     res.send({msg:"hello check"});
@@ -39,8 +64,8 @@ app.get('/', (req, res) =>{
 //http://localhost:8000/
 
 //-- Check if a user already joined an event -- http://localhost:8000/user/event-joined?userId=...&eventId=...
-//-- (must be registered before GET /user/:userId, otherwise "event-joined" is captured as a userId)
-app.get('/user/event-joined', async(req, res)=>{
+
+app.get('/user/event-joined',tokenVerify, async(req, res)=>{
     const { userId, eventId } = req.query;
 
     if (!userId || !eventId) {
@@ -61,7 +86,7 @@ app.get('/user/event-joined', async(req, res)=>{
 
 
 //-- Get user by user id
-app.get('/user/:userId', async(req, res)=>{
+app.get('/user/:userId',tokenVerify, async(req, res)=>{
     const {userId} = req.params;
     const result = await usersCollection.findOne({_id: new ObjectId(userId)});
     res.send(result);
@@ -69,14 +94,14 @@ app.get('/user/:userId', async(req, res)=>{
 
 
 //-- Get User Events -- http://localhost:8000/users/:userId/events
-app.get('/users/:userId/events', async(req, res) => {
+app.get('/users/:userId/events',tokenVerify, async(req, res) => {
     const {userId} = req.params;
     const result = await eventsCollection.find({user_id:userId}).toArray();
     res.send(result);
 });
 
 //-- Create New Event -- http://localhost:8000/event
-app.post('/event', async(req, res) => {
+app.post('/event',tokenVerify, async(req, res) => {
     const newEvent = {
         ...req.body,
         createdAt: new Date(),
@@ -88,19 +113,33 @@ app.post('/event', async(req, res) => {
 
 
 //-- Gell latest 6 events -- http://localhost:8000/latest-events
-app.get('/latest-events', async(req, res)=>{
-    const result = await eventsCollection.find().sort({createdAt: -1}).limit(6).toArray();
+app.get('/latest-events',tokenVerify, async(req, res)=>{
+    const today = new Intl.DateTimeFormat("en-CA", {
+            timeZone: "Asia/Dhaka",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit"
+        }).format(new Date());
+
+    const result = await eventsCollection.find({eventDate: {$gt: today}}).sort({createdAt: -1}).limit(6).toArray();
     res.send(result);
 })
 
 
 // Get All Events -- http://localhost:8000/events
-app.get('/events', async (req, res) => {
+app.get('/events', tokenVerify, async (req, res) => {
     try {
-        const { search, eventType, sort } = req.query;
+        const { search, eventType, sort, status } = req.query;
 
         // Filter object
         const filter = {};
+
+        const today = new Intl.DateTimeFormat("en-CA", {
+            timeZone: "Asia/Dhaka",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit"
+        }).format(new Date());
 
         // Search by title, location or description
         if (search) {
@@ -115,6 +154,20 @@ app.get('/events', async (req, res) => {
                 $regex: `^${eventType}$`,
                 $options: "i"
             };
+        }
+
+
+          // Filter by event status
+        if (status === "upcoming") {
+            filter.eventDate = { $gt: today };
+        }
+
+        if (status === "completed") {
+            filter.eventDate = { $lt: today };
+        }
+
+        if (status === "ongoing") {
+            filter.eventDate = today;
         }
 
         // Sorting
@@ -145,7 +198,7 @@ app.get('/events', async (req, res) => {
 
 
 // Delete event by id 
-app.delete('/event/:Id', async(req, res)=>{
+app.delete('/event/:Id', tokenVerify, async(req, res)=>{
     const {Id} = req.params;
 
     if (!ObjectId.isValid(Id)) {
@@ -162,7 +215,7 @@ app.delete('/event/:Id', async(req, res)=>{
 
 
 // Event Update 
-app.patch('/event/:Id', async(req, res) => {
+app.patch('/event/:Id', tokenVerify, async(req, res) => {
     const {Id} = req.params;
 
     if (!ObjectId.isValid(Id)) {
@@ -193,7 +246,7 @@ app.patch('/event/:Id', async(req, res) => {
 
 
 // Get event by id -- http://localhost:8000/events/id
-app.get('/events/:id', async(req, res) =>{
+app.get('/events/:id', tokenVerify, async(req, res) =>{
     const {id} = req.params;
     const result = await eventsCollection.findOne({_id: new ObjectId(id)});
     res.send(result);
@@ -205,7 +258,7 @@ app.get('/events/:id', async(req, res) =>{
 // =============== Event Joined
 
 //-- Join an event (one user can join an event only once)
-app.post('/user/event-joined', async(req, res)=>{
+app.post('/user/event-joined', tokenVerify, async(req, res)=>{
     const { eventId, userId, status } = req.body;
 
     if (!eventId || !userId) {
@@ -240,7 +293,7 @@ app.post('/user/event-joined', async(req, res)=>{
     }
 })
 
-app.get("/user/event-joined", async (req, res) => {
+app.get("/user/event-joined", tokenVerify, async (req, res) => {
     try {
         const { userId, eventId } = req.query;
 
@@ -268,10 +321,83 @@ app.get("/user/event-joined", async (req, res) => {
 });
 
 //-- Get joined user by user id
-app.get('/user/event-joined/:userId', async(req, res) =>{
+app.get('/user/event-joined/:userId', tokenVerify, async(req, res) =>{
     const {userId} = req.params;
     const result = await eventJoinedCollection.find({userId:userId}).toArray();
     res.send(result);
+})
+
+
+// Delete joined event by id & userId
+app.delete('/user/event-joined/:Id/:userId', tokenVerify, async(req, res) =>{
+    const {Id, userId} = req.params;
+
+    if (!ObjectId.isValid(Id)) {
+        return res.status(400).send({ message: "Invalid event id" });
+    }
+
+    const result = await eventJoinedCollection.deleteOne({_id: new ObjectId(Id), userId:userId});
+    res.send(result);
+})
+
+
+
+app.get("/dashboard/statistics", tokenVerify, async (req, res) => {
+    try {
+        // Get today's date in Bangladesh timezone
+        const today = new Intl.DateTimeFormat("en-CA", {
+            timeZone: "Asia/Dhaka",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit"
+        }).format(new Date());
+
+        // Total events
+        const totalEvents = await eventsCollection.countDocuments();
+
+        // Upcoming events
+        const upcomingEvents = await eventsCollection.countDocuments({
+            eventDate: { $gt: today }
+        });
+
+        // Completed events
+        const completedEvents = await eventsCollection.countDocuments({
+            eventDate: { $lt: today }
+        });
+
+        // Active volunteers (unique users who joined events)
+        const activeVolunteers = await eventJoinedCollection.distinct(
+            "userId",
+            { status: "joined" }
+        );
+
+        res.status(200).send({
+            success: true,
+            statistics: {
+                totalUpcomingEvents: upcomingEvents,
+                totalCompletedEvents: completedEvents,
+                totalActiveVolunteers: activeVolunteers.length,
+                totalEvents: totalEvents
+            }
+        });
+
+    } catch (error) {
+        res.status(500).send({
+            success: false,
+            message: "Failed to fetch dashboard statistics"
+        });
+    }
+});
+
+
+app.get("/events/:eventId/join-count", tokenVerify, async(req, res) =>{
+    const {eventId} = req.params;
+    const totalJoined  = await eventJoinedCollection.countDocuments({
+        eventId: String(eventId),
+        status: "joined"
+    });
+
+    res.send(totalJoined);
 })
 
 
